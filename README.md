@@ -1,69 +1,130 @@
-# Welcome to your Lovable project
+# CryptoPath - Path Your Crypto Future
+**COS30049 - Computing Technology Innovation Project**
 
-## Project info
+## Installation Guide
 
-**URL**: https://lovable.dev/projects/d1728029-5258-4080-b1ab-a8f4eb45297e
+### Prerequisites
+- Node.js 18.0 or higher
+- npm or yarn package manager
+- Neo4j database
+- Git
 
-## How can I edit this code?
+### Setup Instructions
+```bash
+# Clone the repository
+git clone https://github.com/TTMordred/CryptoPath.git
 
-There are several ways of editing your application.
+# Navigate to project directory
+cd cryptopath
 
-**Use Lovable**
+# Install dependencies
+npm install
+npm install next --legacy-peer-deps
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/d1728029-5258-4080-b1ab-a8f4eb45297e) and start prompting.
-
-Changes made via Lovable will be committed automatically to this repo.
-
-**Use your preferred IDE**
-
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
-
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
-
-Follow these steps:
-
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
-
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
+# Set up environment variables
+touch .env.local
+```
+Populate `.env.local` with:
+```dotenv
+ETHERSCAN_API_KEY=YOUR_API_KEY
+ETHERSCAN_API_URL=https://api.etherscan.io/api
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_SECURE=false
+SMTP_USER=your-email@example.com
+SMTP_PASSWORD=your-password
+NEO4J_URI=neo4j+s://your-database-uri
+NEO4J_USERNAME=your-username
+NEO4J_PASSWORD=your-password
+NEXTAUTH_URL=https://cryptopath.vercel.app/
+NEXTAUTH_SECRET=your-secret-key
+NEXT_PUBLIC_INFURA_KEY=your-infura-key
+NEXT_PUBLIC_WALLETCONNECT_PROJECT_ID=your-walletconnect-projectid
+```
+```bash
+# Start the development server
 npm run dev
 ```
 
-**Edit a file directly in GitHub**
+## Project Overview
+**Project Name:** CryptoPath  
+**Description:**
+CryptoPath is a blockchain transaction visualization system that simplifies blockchain data interpretation through an interactive user interface. It allows users to:
+- Enter an Ethereum wallet address to retrieve balance and transaction history.
+- Visualize transactions as a directed graph with interactive nodes.
+- Navigate transaction paths dynamically.
+- View transaction details in a structured table with export options.
+- Leverage a graph database (currently using static demo data) for efficient data storage and retrieval.
 
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
+## Team Members
+- **Le Nguyen Dang Duy** (105028557) - Frontend Lead / Graph Visualization
+- **Phan Cong Hung** (104995595) - Backend & Data Integration Lead
+- **Nguyen Minh Duy** (104974743) - Full-Stack Developer / UI & UX
 
-**Use GitHub Codespaces**
+## Project Structure
+### Frontend
+- Next.js 14 with TypeScript
+- Tailwind CSS & Shadcn/ui components
+- React-based visualization
+- Theme support (light/dark mode)
 
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
+### Backend
+- RESTful API for blockchain data retrieval
+- Data transformation & caching
+- Authentication & rate limiting
 
-## What technologies are used for this project?
+### Graph Database
+- Neo4j for transaction relationship mapping
+- Optimized queries for path discovery
+- Caching & indexing for efficient lookups
 
-This project is built with .
+### API Integration
+- Ethereum blockchain API
+- WebSocket for real-time updates
+- Robust error handling & data validation
 
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
+### UI/UX Design
+- Responsive & accessible UI
+- Interactive transaction graph
+- Enhanced navigation & visualization
 
-## How can I deploy this project?
+## Core Functionalities
+### Wallet Information
+- Address lookup & validation
+- Balance & transaction history
+- Token holdings tracking
 
-Simply open [Lovable](https://lovable.dev/projects/d1728029-5258-4080-b1ab-a8f4eb45297e) and click on Share -> Publish.
+### Transaction Graph
+- Interactive node-edge visualization
+- Zoom, pan, filtering, and path tracing
 
-## I want to use a custom domain - is that possible?
+### Transaction Table
+- Sortable & searchable data
+- Export (CSV) & quick-copy features
 
-We don't support custom domains (yet). If you want to deploy your project under your own domain then we recommend using Netlify. Visit our docs for more details: [Custom domains](https://docs.lovable.dev/tips-tricks/custom-domain/)
+### Data Storage
+- Efficient graph schema
+- Caching & performance optimizations
+
+## Future Enhancements
+### Advanced Features
+- Real-time data integration & multi-chain support
+- 3D visualization & pattern recognition
+- User-customizable alerts & annotations
+- Performance & security optimizations
+
+## API Documentation
+- Authentication & rate limits
+- Endpoint descriptions & error handling
+
+## Contributing
+Refer to `CONTRIBUTING.md` for guidelines on submitting pull requests.
+
+## License
+This project is licensed under the MIT License. See `LICENSE.md` for details.
+
+## Acknowledgements
+- Ethereum blockchain community
+- Neo4j graph database
+- Next.js framework
+- Shadcn/ui components
