@@ -15,13 +15,17 @@ const SettingSync: React.FC = () => {
 
   useEffect(() => {
     const getUser = async () => {
-      const { data } = await supabase.auth.getUser();
-      setUser(data.user);
-      
-      // Get last synced time from localStorage
-      if (typeof window !== 'undefined') {
-        const lastSyncTime = localStorage.getItem('lastProfileSync');
-        setLastSynced(lastSyncTime);
+      try {
+        const { data } = await supabase.auth.getUser();
+        setUser(data.user);
+        
+        // Get last synced time from localStorage
+        if (typeof window !== 'undefined') {
+          const lastSyncTime = localStorage.getItem('lastProfileSync');
+          setLastSynced(lastSyncTime);
+        }
+      } catch (error) {
+        console.error('Error getting user:', error);
       }
     };
 
@@ -29,12 +33,16 @@ const SettingSync: React.FC = () => {
   }, []);
 
   const handleSync = async () => {
-    await syncWithSupabase();
-    
-    // Update last synced time
-    const now = new Date().toISOString();
-    localStorage.setItem('lastProfileSync', now);
-    setLastSynced(now);
+    try {
+      await syncWithSupabase();
+      
+      // Update last synced time
+      const now = new Date().toISOString();
+      localStorage.setItem('lastProfileSync', now);
+      setLastSynced(now);
+    } catch (error) {
+      console.error('Error syncing profile:', error);
+    }
   };
 
   if (!user) {

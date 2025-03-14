@@ -3,7 +3,6 @@
 
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { supabase } from '@/src/integrations/supabase/client';
-import { syncProfileWithSupabase, fetchProfileFromSupabase } from '@/lib/utils/syncProfileData';
 import { toast } from 'sonner';
 
 type ProfileSettings = {
@@ -51,26 +50,30 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
   // Get user information and settings key
   useEffect(() => {
     const getCurrentUserInfo = async () => {
-      // Check if we have a session
-      const { data: { session } } = await supabase.auth.getSession();
-      const currentUserId = session?.user?.id || null;
-      
-      if (currentUserId) {
-        setUserId(currentUserId);
+      try {
+        // Check if we have a session
+        const { data: { session } } = await supabase.auth.getSession();
+        const currentUserId = session?.user?.id || null;
         
-        // Check localStorage for settingsKey
-        if (typeof window !== 'undefined') {
-          const currentUser = localStorage.getItem('currentUser');
-          if (currentUser) {
-            const userData = JSON.parse(currentUser);
-            const key = userData.settingsKey || `settings_${currentUserId}`;
-            setSettingsKey(key);
-          } else {
-            // Create a settingsKey if none exists
-            const newKey = `settings_${currentUserId}`;
-            setSettingsKey(newKey);
+        if (currentUserId) {
+          setUserId(currentUserId);
+          
+          // Check localStorage for current user
+          if (typeof window !== 'undefined') {
+            const currentUser = localStorage.getItem('currentUser');
+            if (currentUser) {
+              const userData = JSON.parse(currentUser);
+              const key = userData.settingsKey || `settings_${userData.email || currentUserId}`;
+              setSettingsKey(key);
+            } else {
+              // Create a settingsKey if none exists
+              const newKey = `settings_${currentUserId}`;
+              setSettingsKey(newKey);
+            }
           }
         }
+      } catch (error) {
+        console.error('Error getting user info:', error);
       }
     };
 
@@ -82,38 +85,88 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
     const loadSettings = async () => {
       if (!userId) return;
       
-      // First try to load from localStorage
-      let settings;
-      if (typeof window !== 'undefined' && settingsKey) {
-        const saved = localStorage.getItem(settingsKey);
-        settings = saved ? JSON.parse(saved) : null;
-      }
-      
-      if (!settings) {
-        // If no localStorage data, try to fetch from Supabase
-        try {
-          setIsSyncing(true);
-          const supabaseSettings = await fetchProfileFromSupabase(userId);
-          if (supabaseSettings) {
-            setProfile(supabaseSettings.profile);
-            setSavedProfile(supabaseSettings.profile);
-            setWallets(supabaseSettings.wallets);
-            return;
-          }
-        } catch (error) {
-          console.error('Error fetching settings from Supabase:', error);
-        } finally {
-          setIsSyncing(false);
+      try {
+        // First, try to fetch from Supabase
+        const { data: profileData, error: profileError } = await supabase
+          .from('profiles')
+          .select('*')
+          .eq('id', userId)
+          .single();
+          
+        if (profileError && profileError.code !== 'PGRST116') {
+          console.error('Error fetching profile from Supabase:', profileError);
         }
-      } else {
-        // Use localStorage data
-        setProfile(settings.profile || defaultProfile);
-        setSavedProfile(settings.profile || defaultProfile);
-        setWallets(settings.wallets || []);
+        
+        const { data: walletData, error: walletError } = await supabase
+          .from('user_wallets')
+          .select('*')
+          .eq('user_id', userId);
+          
+        if (walletError) {
+          console.error('Error fetching wallets from Supabase:', walletError);
+        }
+        
+        // If we have Supabase data, use it
+        if (profileData) {
+          const profileSettings: ProfileSettings = {
+            username: profileData.display_name || profileData.username || 'User',
+            profileImage: profileData.profile_image || null,
+            backgroundImage: profileData.background_image || null,
+          };
+          
+          setProfile(profileSettings);
+          setSavedProfile(profileSettings);
+        }
+        
+        if (walletData && walletData.length > 0) {
+          const formattedWallets: Wallet[] = walletData.map(wallet => ({
+            id: wallet.id,
+            address: wallet.wallet_address,
+            isDefault: wallet.is_default || false,
+          }));
+          
+          setWallets(formattedWallets);
+        }
+        
+        // If no Supabase data or incomplete data, try localStorage as fallback
+        if ((!profileData || !walletData || walletData.length === 0) && typeof window !== 'undefined' && settingsKey) {
+          const saved = localStorage.getItem(settingsKey);
+          const settings = saved ? JSON.parse(saved) : null;
+          
+          if (settings) {
+            if (!profileData && settings.profile) {
+              setProfile(settings.profile);
+              setSavedProfile(settings.profile);
+            }
+            
+            if ((!walletData || walletData.length === 0) && settings.wallets) {
+              setWallets(settings.wallets);
+            }
+            
+            // If we loaded from localStorage, sync with Supabase
+            syncSettingsToSupabase(userId, settings.profile, settings.wallets);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading settings:', error);
+        
+        // Fallback to localStorage if Supabase fails
+        if (typeof window !== 'undefined' && settingsKey) {
+          const saved = localStorage.getItem(settingsKey);
+          const settings = saved ? JSON.parse(saved) : null;
+          
+          if (settings) {
+            setProfile(settings.profile || defaultProfile);
+            setSavedProfile(settings.profile || defaultProfile);
+            setWallets(settings.wallets || []);
+          }
+        }
       }
     };
 
-    loadSettings();
+    if (userId) {
+      loadSettings();
+    }
   }, [userId, settingsKey]);
 
   // Check for unsaved changes
@@ -122,39 +175,135 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
     setHasUnsavedChanges(isChanged);
   }, [profile, savedProfile]);
 
+  // Function to sync settings to Supabase
+  const syncSettingsToSupabase = async (userId: string, profileSettings: ProfileSettings, walletSettings: Wallet[]) => {
+    if (!userId) return;
+    
+    try {
+      // Update profile
+      await supabase
+        .from('profiles')
+        .update({
+          display_name: profileSettings.username,
+          profile_image: profileSettings.profileImage,
+          background_image: profileSettings.backgroundImage,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', userId);
+      
+      // Handle wallets - more complex because we need to compare what exists already
+      const { data: existingWallets, error: walletFetchError } = await supabase
+        .from('user_wallets')
+        .select('*')
+        .eq('user_id', userId);
+        
+      if (walletFetchError) {
+        console.error('Error fetching existing wallets:', walletFetchError);
+        return;
+      }
+      
+      // Convert walletSettings to a format we can work with
+      const walletsToSync = walletSettings.map(wallet => ({
+        user_id: userId,
+        wallet_address: wallet.address,
+        is_default: wallet.isDefault,
+      }));
+      
+      // Identify wallets to add or update
+      for (const wallet of walletsToSync) {
+        const existingWallet = existingWallets?.find(w => w.wallet_address === wallet.wallet_address);
+        
+        if (!existingWallet) {
+          // Add new wallet
+          await supabase
+            .from('user_wallets')
+            .insert(wallet);
+        } else if (existingWallet.is_default !== wallet.is_default) {
+          // Update wallet if default status changed
+          await supabase
+            .from('user_wallets')
+            .update({ is_default: wallet.is_default })
+            .eq('id', existingWallet.id);
+        }
+      }
+      
+      // Identify wallets to remove
+      if (existingWallets) {
+        for (const existingWallet of existingWallets) {
+          const shouldKeep = walletsToSync.some(w => w.wallet_address === existingWallet.wallet_address);
+          
+          if (!shouldKeep) {
+            // Remove wallet that's no longer in the list
+            await supabase
+              .from('user_wallets')
+              .delete()
+              .eq('id', existingWallet.id);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error syncing settings to Supabase:', error);
+      throw error;
+    }
+  };
+
   const updateProfile = (updates: Partial<ProfileSettings>) => {
     setProfile(prev => ({ ...prev, ...updates }));
   };
 
-  const saveProfile = () => {
-    if (settingsKey && typeof window !== 'undefined') {
-      setSavedProfile(profile);
-      const settingsData = { profile, wallets };
-      localStorage.setItem(settingsKey, JSON.stringify(settingsData));
-
-      // Update currentUser data
+  const saveProfile = async () => {
+    if (!userId) {
+      toast.error('You must be logged in to save settings');
+      return;
+    }
+    
+    try {
+      // Update Supabase
+      await supabase
+        .from('profiles')
+        .update({
+          display_name: profile.username,
+          profile_image: profile.profileImage,
+          background_image: profile.backgroundImage,
+          updated_at: new Date().toISOString(),
+        })
+        .eq('id', userId);
+      
+      // Update localStorage
+      if (settingsKey && typeof window !== 'undefined') {
+        setSavedProfile(profile);
+        const settingsData = { profile, wallets };
+        localStorage.setItem(settingsKey, JSON.stringify(settingsData));
+      }
+      
+      toast.success('Profile saved successfully');
+      
+      // Update currentUser data in localStorage
       const currentUser = localStorage.getItem('currentUser');
       if (currentUser) {
         const userData = JSON.parse(currentUser);
-        userData.name = profile.username; // Update name only
+        userData.name = profile.username;
         localStorage.setItem('currentUser', JSON.stringify(userData));
       }
-
-      // If we have a userId, sync with Supabase
-      if (userId) {
-        syncProfileWithSupabase(userId)
-          .then(() => {
-            // Success is handled silently
-          })
-          .catch(error => {
-            console.error('Error syncing with Supabase:', error);
-            // Error is already toasted in the sync function
-          });
-      }
+    } catch (error) {
+      console.error('Error saving profile:', error);
+      toast.error('Failed to save profile');
     }
   };
 
   const addWallet = async (address: string) => {
+    if (!userId) {
+      toast.error('You must be logged in to add a wallet');
+      return;
+    }
+    
+    // Check if wallet already exists
+    const walletExists = wallets.some(wallet => wallet.address.toLowerCase() === address.toLowerCase());
+    if (walletExists) {
+      toast.error('This wallet address is already added');
+      return;
+    }
+    
     const newWallet: Wallet = {
       id: Date.now().toString(),
       address,
@@ -164,97 +313,92 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
     const updatedWallets = [...wallets, newWallet];
     setWallets(updatedWallets);
     
-    if (settingsKey) {
-      const settingsData = { profile, wallets: updatedWallets };
-      localStorage.setItem(settingsKey, JSON.stringify(settingsData));
+    try {
+      // Add to Supabase
+      const { error } = await supabase
+        .from('user_wallets')
+        .insert({
+          user_id: userId,
+          wallet_address: address,
+          is_default: newWallet.isDefault,
+        });
+        
+      if (error) throw error;
       
-      // If we have a userId, add the wallet to Supabase
-      if (userId) {
-        try {
-          const { error } = await supabase
-            .from('user_wallets')
-            .insert({
-              user_id: userId,
-              wallet_address: address,
-              is_default: newWallet.isDefault
-            });
-            
-          if (error) throw error;
-        } catch (error) {
-          console.error('Error adding wallet to Supabase:', error);
-          toast.error('Failed to save wallet to database. Changes only saved locally.');
-        }
+      // Update localStorage
+      if (settingsKey) {
+        const settingsData = { profile, wallets: updatedWallets };
+        localStorage.setItem(settingsKey, JSON.stringify(settingsData));
       }
+      
+      toast.success('Wallet added successfully');
+    } catch (error) {
+      console.error('Error adding wallet:', error);
+      toast.error('Failed to add wallet');
     }
   };
 
   const removeWallet = async (id: string) => {
+    if (!userId) {
+      toast.error('You must be logged in to remove a wallet');
+      return;
+    }
+    
     const walletToRemove = wallets.find(w => w.id === id);
     if (!walletToRemove) return;
     
     const remainingWallets = wallets.filter(w => w.id !== id);
     
-    // If we're removing the default wallet, make another one default
+    // If removing the default wallet, make another one default
     if (walletToRemove.isDefault && remainingWallets.length > 0) {
       remainingWallets[0].isDefault = true;
     }
     
     setWallets(remainingWallets);
     
-    if (settingsKey) {
-      const settingsData = { profile, wallets: remainingWallets };
-      localStorage.setItem(settingsKey, JSON.stringify(settingsData));
+    try {
+      // Remove from Supabase - first find the actual database ID
+      const { data, error: fetchError } = await supabase
+        .from('user_wallets')
+        .select('id')
+        .eq('wallet_address', walletToRemove.address)
+        .eq('user_id', userId);
+        
+      if (fetchError) throw fetchError;
       
-      // If we have a userId, remove the wallet from Supabase
-      if (userId) {
-        try {
-          // We need to find the actual database ID for this wallet
-          const { data, error: fetchError } = await supabase
-            .from('user_wallets')
-            .select('id')
-            .eq('wallet_address', walletToRemove.address)
-            .eq('user_id', userId);
-            
-          if (fetchError) throw fetchError;
+      if (data && data.length > 0) {
+        const { error: deleteError } = await supabase
+          .from('user_wallets')
+          .delete()
+          .eq('id', data[0].id);
           
-          if (data && data.length > 0) {
-            const { error: deleteError } = await supabase
-              .from('user_wallets')
-              .delete()
-              .eq('id', data[0].id);
-              
-            if (deleteError) throw deleteError;
-            
-            // If this was the default wallet, update another one
-            if (walletToRemove.isDefault && remainingWallets.length > 0) {
-              const newDefaultWallet = remainingWallets[0];
-              const { data: walletData, error: walletFetchError } = await supabase
-                .from('user_wallets')
-                .select('id')
-                .eq('wallet_address', newDefaultWallet.address)
-                .eq('user_id', userId);
-                
-              if (walletFetchError) throw walletFetchError;
-              
-              if (walletData && walletData.length > 0) {
-                const { error: updateError } = await supabase
-                  .from('user_wallets')
-                  .update({ is_default: true })
-                  .eq('id', walletData[0].id);
-                  
-                if (updateError) throw updateError;
-              }
-            }
-          }
-        } catch (error) {
-          console.error('Error removing wallet from Supabase:', error);
-          toast.error('Failed to remove wallet from database. Changes only saved locally.');
-        }
+        if (deleteError) throw deleteError;
       }
+      
+      // Update localStorage
+      if (settingsKey) {
+        const settingsData = { profile, wallets: remainingWallets };
+        localStorage.setItem(settingsKey, JSON.stringify(settingsData));
+      }
+      
+      toast.success('Wallet removed successfully');
+      
+      // Update default wallet if needed
+      if (walletToRemove.isDefault && remainingWallets.length > 0) {
+        await setDefaultWallet(remainingWallets[0].id);
+      }
+    } catch (error) {
+      console.error('Error removing wallet:', error);
+      toast.error('Failed to remove wallet');
     }
   };
 
   const setDefaultWallet = async (id: string) => {
+    if (!userId) {
+      toast.error('You must be logged in to set a default wallet');
+      return;
+    }
+    
     const updatedWallets = wallets.map(wallet => ({
       ...wallet,
       isDefault: wallet.id === id,
@@ -262,47 +406,47 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
     
     setWallets(updatedWallets);
     
-    if (settingsKey) {
-      const settingsData = { profile, wallets: updatedWallets };
-      localStorage.setItem(settingsKey, JSON.stringify(settingsData));
+    try {
+      // Find the wallet that's being set as default
+      const newDefaultWallet = updatedWallets.find(w => w.id === id);
+      if (!newDefaultWallet) return;
       
-      // If we have a userId, update default wallet in Supabase
-      if (userId) {
-        try {
-          // Find the wallet that's being set as default
-          const newDefaultWallet = updatedWallets.find(w => w.id === id);
-          if (!newDefaultWallet) return;
+      // Reset all wallets to non-default first
+      const { error: resetError } = await supabase
+        .from('user_wallets')
+        .update({ is_default: false })
+        .eq('user_id', userId);
+        
+      if (resetError) throw resetError;
+      
+      // Then set the new default
+      const { data, error: fetchError } = await supabase
+        .from('user_wallets')
+        .select('id')
+        .eq('wallet_address', newDefaultWallet.address)
+        .eq('user_id', userId);
+        
+      if (fetchError) throw fetchError;
+      
+      if (data && data.length > 0) {
+        const { error: updateError } = await supabase
+          .from('user_wallets')
+          .update({ is_default: true })
+          .eq('id', data[0].id);
           
-          // First, set all wallets to non-default
-          const { error: resetError } = await supabase
-            .from('user_wallets')
-            .update({ is_default: false })
-            .eq('user_id', userId);
-            
-          if (resetError) throw resetError;
-          
-          // Then set the new default
-          const { data, error: fetchError } = await supabase
-            .from('user_wallets')
-            .select('id')
-            .eq('wallet_address', newDefaultWallet.address)
-            .eq('user_id', userId);
-            
-          if (fetchError) throw fetchError;
-          
-          if (data && data.length > 0) {
-            const { error: updateError } = await supabase
-              .from('user_wallets')
-              .update({ is_default: true })
-              .eq('id', data[0].id);
-              
-            if (updateError) throw updateError;
-          }
-        } catch (error) {
-          console.error('Error updating default wallet in Supabase:', error);
-          toast.error('Failed to update default wallet in database. Changes only saved locally.');
-        }
+        if (updateError) throw updateError;
       }
+      
+      // Update localStorage
+      if (settingsKey) {
+        const settingsData = { profile, wallets: updatedWallets };
+        localStorage.setItem(settingsKey, JSON.stringify(settingsData));
+      }
+      
+      toast.success('Default wallet updated');
+    } catch (error) {
+      console.error('Error setting default wallet:', error);
+      toast.error('Failed to update default wallet');
     }
   };
 
@@ -315,7 +459,7 @@ export const SettingsProvider: React.FC<{ children: ReactNode }> = ({ children }
     setIsSyncing(true);
     
     try {
-      await syncProfileWithSupabase(userId);
+      await syncSettingsToSupabase(userId, profile, wallets);
       toast.success('Settings synchronized with database');
     } catch (error) {
       console.error('Error during sync:', error);

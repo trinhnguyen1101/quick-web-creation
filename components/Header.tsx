@@ -37,10 +37,20 @@ const Header = () => {
         setCurrentUser({
           id: user.id,
           email: user.email,
-          name: user.user_metadata?.full_name || user.email?.split("@")[0], // Use full_name from metadata
+          name: user.user_metadata?.full_name || user.email?.split("@")[0],
         });
+        
+        // Store user info in localStorage for other components
+        localStorage.setItem('currentUser', JSON.stringify({
+          id: user.id,
+          email: user.email,
+          name: user.user_metadata?.full_name || user.email?.split("@")[0],
+          isLoggedIn: true,
+          settingsKey: `settings_${user.email}`
+        }));
       } else {
         setCurrentUser(null);
+        localStorage.removeItem('currentUser');
       }
     };
 
@@ -56,9 +66,18 @@ const Header = () => {
             email: user.email,
             name: user.user_metadata?.full_name || user.email?.split("@")[0],
           });
+          
+          // Store user info in localStorage for other components
+          localStorage.setItem('currentUser', JSON.stringify({
+            id: user.id,
+            email: user.email,
+            name: user.user_metadata?.full_name || user.email?.split("@")[0],
+            isLoggedIn: true,
+            settingsKey: `settings_${user.email}`
+          }));
         } else if (event === "SIGNED_OUT") {
           setCurrentUser(null);
-          localStorage.removeItem("currentUser"); // Clean up if used elsewhere
+          localStorage.removeItem("currentUser");
         }
       }
     );

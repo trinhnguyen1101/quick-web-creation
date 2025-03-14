@@ -1,5 +1,4 @@
 
-// app/settings/page.tsx (hoặc bất kỳ đường dẫn nào bạn đang dùng cho Settings)
 'use client';
 
 import React from 'react';
@@ -9,7 +8,7 @@ import ProfileSection from '@/components/setting_ui/ProfileSection';
 import WalletSection from '@/components/setting_ui/WalletSection';
 import SettingSync from '@/components/setting_ui/SettingSync';
 import ParticlesBackground from '@/components/ParticlesBackground';
-import ClientLayout from '@/components/ClientLayout'; // Import từ ClientLayout
+import ClientLayout from '@/components/ClientLayout';
 
 const Settings = () => {
   return (

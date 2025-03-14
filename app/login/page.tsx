@@ -107,6 +107,18 @@ function LoginPageContent() {
 
   const [account, setAccount] = useState<Account | null>(null);
 
+  // Check if user is already authenticated and redirect if so
+  useEffect(() => {
+    const checkExistingSession = async () => {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session) {
+        router.push('/');
+      }
+    };
+    
+    checkExistingSession();
+  }, [router]);
+
   // Handle wallet connection with Supabase
   useEffect(() => {
     if (wallet?.provider && !isLoggedOut) {
@@ -173,10 +185,17 @@ function LoginPageContent() {
         if (error.message.includes("email")) setEmailError(error.message);
         else if (error.message.includes("password")) setPasswordError(error.message);
         else toast.error(error.message);
+        setIsLoading(false);
         return;
       }
 
-      // Sử dụng display_name thay vì full_name
+      if (!data.user) {
+        toast.error("Something went wrong with the login");
+        setIsLoading(false);
+        return;
+      }
+
+      // Get the user profile data
       const { data: profileData } = await supabase
         .from("profiles")
         .select("*")
@@ -188,9 +207,9 @@ function LoginPageContent() {
       if (!existingSettings) {
         const defaultSettings = {
           profile: {
-            username: email.split("@")[0],
-            profileImage: null,
-            backgroundImage: null,
+            username: profileData?.display_name || email.split("@")[0],
+            profileImage: profileData?.profile_image || null,
+            backgroundImage: profileData?.background_image || null,
           },
           wallets: [],
         };
@@ -198,12 +217,13 @@ function LoginPageContent() {
       }
 
       const publicUserData = {
-        name: profileData?.display_name || email.split("@")[0], // Thay full_name bằng display_name
+        id: data.user.id,
+        name: profileData?.display_name || email.split("@")[0],
         email,
         isLoggedIn: true,
         settingsKey,
       };
-      localStorage.setItem("userDisplayInfo", JSON.stringify(publicUserData));
+      localStorage.setItem("currentUser", JSON.stringify(publicUserData));
       localStorage.setItem("userToken", data.session?.access_token || "");
 
       toast.success("Login successful!");
