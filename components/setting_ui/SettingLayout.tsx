@@ -1,19 +1,22 @@
+
 'use client';
 import React, { useState } from 'react';
-import { UserRound, Wallet } from 'lucide-react';
+import { UserRound, Wallet, Cloud } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useIsMobile } from '@/hooks/use-mobile';
 
-type Tab = 'profile' | 'wallet';
+type Tab = 'profile' | 'wallet' | 'sync';
 
 interface SettingLayoutProps {
   profileSection: React.ReactNode;
   walletSection: React.ReactNode;
+  syncSection?: React.ReactNode;
 }
 
 const SettingLayout: React.FC<SettingLayoutProps> = ({ 
   profileSection, 
-  walletSection 
+  walletSection,
+  syncSection
 }) => {
   const [activeTab, setActiveTab] = useState<Tab>('profile');
   const isMobile = useIsMobile();
@@ -21,6 +24,7 @@ const SettingLayout: React.FC<SettingLayoutProps> = ({
   const tabs = [
     { id: 'profile', label: 'Profile', icon: <UserRound className="h-5 w-5" /> },
     { id: 'wallet', label: 'Wallet Addresses', icon: <Wallet className="h-5 w-5" /> },
+    { id: 'sync', label: 'Sync', icon: <Cloud className="h-5 w-5" /> },
   ];
 
   return (
@@ -66,6 +70,11 @@ const SettingLayout: React.FC<SettingLayoutProps> = ({
           {activeTab === 'wallet' && (
             <div className="animate-fade-in">
               {walletSection}
+            </div>
+          )}
+          {activeTab === 'sync' && syncSection && (
+            <div className="animate-fade-in">
+              {syncSection}
             </div>
           )}
         </div>
